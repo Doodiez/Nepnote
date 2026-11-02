@@ -20,7 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -726,8 +726,15 @@ fn main() {
             let open = MenuItem::with_id(app, "open", "Open notes folder", true, None::<&str>)?;
             let edit = MenuItem::with_id(app, "settings", "Edit game list and settings", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
+            // Off by default. If it was turned on, refresh the entry so it follows the exe if it moved.
+            let startup_on = ffi::startup_enabled();
+            if startup_on {
+                ffi::set_startup(true);
+            }
+            let startup = CheckMenuItem::with_id(app, "startup", "Start with Windows", true, startup_on, None::<&str>)?;
+            let startup_item = startup.clone();
             let quit = MenuItem::with_id(app, "quit", "Exit Nepnote", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &edit, &sep, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &edit, &startup, &sep, &quit])?;
             let menu_root = root.clone();
             let mut tray = TrayIconBuilder::with_id("main")
                 .tooltip("Nepnote - Shift+F1 in a listed game")
@@ -738,6 +745,11 @@ fn main() {
                     }
                     "settings" => {
                         let _ = std::process::Command::new("notepad.exe").arg(settings_path(&menu_root)).spawn();
+                    }
+                    "startup" => {
+                        let want = !ffi::startup_enabled();
+                        ffi::set_startup(want);
+                        let _ = startup_item.set_checked(ffi::startup_enabled());
                     }
                     "quit" => app.exit(0),
                     _ => {}

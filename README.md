@@ -10,6 +10,8 @@ A notes overlay for games on Windows. Press **Shift+F1** in a game on your list 
 - **Folder style:** click a folder to pick its color and icon.
 - **Pin:** shows the current note as a small card while you play. **Lock** keeps the overlay and card in place, and makes the card click-through so clicks go to your game.
 
+- **Start with Windows:** off by default. Turn it on or off from the tray icon menu.
+
 Notes are plain `.txt` files in **Documents\Nepnote\<game>**, so you can open them without the app. The game list and settings are in **Documents\Nepnote\settings.json** (tray icon → *Edit game list and settings*).
 
 ## Anti-cheat safety

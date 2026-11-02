@@ -1,6 +1,6 @@
 [package]
 name = "nepnote"
-version = "1.0.0"
+version = "1.0.1"
 description = "Nepnote - a notes overlay for games"
 authors = ["Mior Iman Haiqal"]
 edition = "2021"

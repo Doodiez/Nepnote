@@ -174,3 +174,57 @@ pub fn already_running() -> bool {
         h != 0 && GetLastError() == 183 // ERROR_ALREADY_EXISTS
     }
 }
+
+// ---------------------------------------------------------------- start with Windows
+// A per-user "Run" entry, the standard way apps start at sign-in. Off unless the
+// user turns it on from the tray menu.
+
+#[link(name = "advapi32")]
+extern "system" {
+    fn RegSetKeyValueW(key: isize, subkey: *const u16, value: *const u16, kind: u32, data: *const c_void, len: u32) -> i32;
+    fn RegDeleteKeyValueW(key: isize, subkey: *const u16, value: *const u16) -> i32;
+    fn RegGetValueW(key: isize, subkey: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut c_void, len: *mut u32) -> i32;
+}
+
+const HKEY_CURRENT_USER: isize = 0x8000_0001u32 as i32 as isize;
+const RUN_KEY: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+const RUN_VALUE: &str = "Nepnote";
+
+pub fn startup_enabled() -> bool {
+    let sub = wide(RUN_KEY);
+    let val = wide(RUN_VALUE);
+    let mut len: u32 = 0;
+    unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            sub.as_ptr(),
+            val.as_ptr(),
+            0x0000_0002, // RRF_RT_REG_SZ
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut len,
+        ) == 0
+    }
+}
+
+pub fn set_startup(on: bool) -> bool {
+    let sub = wide(RUN_KEY);
+    let val = wide(RUN_VALUE);
+    unsafe {
+        if on {
+            let Ok(exe) = std::env::current_exe() else { return false };
+            let cmd = wide(&format!("\"{}\"", exe.to_string_lossy()));
+            RegSetKeyValueW(
+                HKEY_CURRENT_USER,
+                sub.as_ptr(),
+                val.as_ptr(),
+                1, // REG_SZ
+                cmd.as_ptr() as *const c_void,
+                (cmd.len() * 2) as u32,
+            ) == 0
+        } else {
+            let r = RegDeleteKeyValueW(HKEY_CURRENT_USER, sub.as_ptr(), val.as_ptr());
+            r == 0 || r == 2 // removed, or wasn't there
+        }
+    }
+}
