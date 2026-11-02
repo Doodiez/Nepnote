@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Notes</title>
+<style>
+/* Layout: a fake game screen fills the page; the notes overlay floats on top (folder tree left, note right); a small pinned card can stay on screen while you play. Single dark look, matching the Windows app. */
+:root {
+  color-scheme: dark;
+  --page: #0c0c10;
+  --ov-bg: #17171d;
+  --panel: #22222b;
+  --row-hover: #2b2b36;
+  --row-sel: #3a3456;
+  --line: #34343f;
+  --accent: #8b7cf6;
+  --accent-soft: rgba(139, 124, 246, .18);
+  --accent-ink: #ffffff;
+  --text: #ececf1;
+  --title: #f2f2f7;
+  --muted: #8a8a9c;
+  --done: #6a6a7c;
+  --danger: #f2716b;
+  --folder: #e8b44c;
+  --page-ink: #f4f4f8;
+  --font-ui: "Segoe UI", "IBM Plex Sans", system-ui, sans-serif;
+  --font-note: "Cascadia Mono", Consolas, "JetBrains Mono", ui-monospace, monospace;
+  --radius: 10px;
+  --ov-opacity: .96;
+}
+html, body { height: 100%; }
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---------- top strip ---------- */
+.strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.strip h1 { font-size: 15px; font-weight: 600; margin: 0; color: var(--title); letter-spacing: .01em; }
+.strip p { margin: 0; color: var(--muted); font-size: 13px; }
+kbd {
+  font-family: var(--font-ui); font-size: 11.5px; font-weight: 600;
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--title);
+}
+.games { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.games span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.chip {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 999px;
+  padding: 5px 12px; font-size: 13px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- fake game screen ---------- */
+.scene {
+  position: relative; flex: 1; min-height: 540px; border-radius: 14px; overflow: hidden;
+  background:
+    radial-gradient(120% 70% at 70% 110%, #1d3b2a 0 40%, transparent 41%),
+    radial-gradient(90% 60% at 15% 115%, #23462f 0 45%, transparent 46%),
+    radial-gradient(60% 40% at 80% 18%, rgba(255,214,150,.35), transparent 70%),
+    linear-gradient(#5d7fa8 0%, #9fb7c9 48%, #c9c3a8 62%, #3f6b45 63%, #24402b 100%);
+}
+.scene::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 38%;
+  background: repeating-linear-gradient(100deg, transparent 0 14px, rgba(20,50,25,.35) 14px 16px);
+  pointer-events: none;
+}
+.hud { position: absolute; left: 18px; bottom: 18px; z-index: 1; display: grid; gap: 6px; }
+.bar { width: 190px; height: 10px; border-radius: 6px; background: rgba(0,0,0,.45); overflow: hidden; }
+.bar i { display: block; height: 100%; }
+.bar.hp i { width: 72%; background: #e05a5a; }
+.bar.st i { width: 48%; background: #e8c45a; }
+.mini {
+  position: absolute; right: 18px; bottom: 18px; z-index: 1; width: 92px; height: 92px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #f4f4f8 0 3px, transparent 4px), rgba(0,0,0,.35);
+  border: 2px solid rgba(255,255,255,.35);
+}
+.playing {
+  position: absolute; left: 18px; top: 16px; z-index: 1;
+  background: rgba(0,0,0,.45); color: var(--page-ink); padding: 6px 12px; border-radius: 8px; font-size: 13px;
+}
+.hint {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1;
+  text-align: center; display: grid; gap: 10px; justify-items: center; color: var(--page-ink);
+  text-shadow: 0 1px 8px rgba(0,0,0,.5); padding: 0 16px;
+}
+.hint strong { font-size: 18px; font-weight: 600; }
+.open-btn {
+  border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 8px;
+  padding: 8px 14px; font-weight: 600; cursor: pointer; text-shadow: none;
+}
+
+/* ---------- overlay ---------- */
+.overlay {
+  position: absolute; z-index: 5; width: min(740px, calc(100% - 24px)); height: min(470px, calc(100% - 24px));
+  background: var(--ov-bg); opacity: var(--ov-opacity); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  display: grid; grid-template-rows: 42px 1fr 30px; overflow: hidden;
+}
+.titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 0 8px 0 14px; cursor: grab; user-select: none;
+  touch-action: none; min-width: 0;
+}
+.titlebar:active { cursor: grabbing; }
+.is-locked .titlebar, .is-locked .titlebar:active, .is-locked .pin-head, .is-locked .pin-head:active { cursor: default; }
+.lock-btn svg .open-shackle { display: none; }
+.lock-btn[aria-pressed="false"] svg .closed-shackle { display: none; }
+.lock-btn[aria-pressed="false"] svg .open-shackle { display: inline; }
+.pill { width: 4px; height: 16px; border-radius: 2px; background: var(--accent); flex: none; }
+.ttl { font-size: 14px; font-weight: 600; color: var(--title); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.ttl em { font-style: normal; color: var(--muted); font-weight: 500; }
+.opacity { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11.5px; flex: none; cursor: default; }
+.opacity svg { width: 14px; height: 14px; }
+.opacity input { width: 84px; accent-color: var(--accent); cursor: pointer; }
+.opacity output { width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
+.tbtn {
+  border: 1px solid transparent; background: transparent; color: var(--muted); padding: 4px 9px; border-radius: 6px;
+  cursor: pointer; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; flex: none;
+}
+.tbtn svg { width: 13px; height: 13px; }
+.tbtn:hover:not(:disabled) { background: var(--row-hover); color: var(--title); }
+.tbtn:disabled { opacity: .4; cursor: default; }
+.tbtn[aria-pressed="true"] { background: var(--accent-soft); color: var(--title); border-color: var(--accent); }
+
+.body { display: grid; grid-template-columns: 236px 1fr; gap: 8px; padding: 2px 12px 0; min-height: 0; }
+.side, .main { background: var(--panel); border-radius: var(--radius); min-height: 0; min-width: 0; }
+.side { display: grid; grid-template-rows: auto 1fr auto; padding: 8px; gap: 6px; }
+.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.tool {
+  border: 1px solid var(--line); background: var(--ov-bg); border-radius: 7px; padding: 6px 0;
+  font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.tool:hover { background: var(--row-hover); }
+.tool svg { width: 13px; height: 13px; flex: none; }
+
+.tree { overflow: auto; min-height: 0; padding: 2px 0 8px; border-radius: 6px; }
+.tree.drop-root { box-shadow: inset 0 0 0 1px var(--accent); }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 8px; border-radius: 6px;
+  font-size: 13.5px; cursor: pointer; white-space: nowrap; user-select: none;
+}
+.row:hover { background: var(--row-hover); }
+.row.sel { background: var(--row-sel); }
+.row.drop { box-shadow: inset 0 0 0 1px var(--accent); }
+.row .name { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.row .pin-dot { width: 12px; height: 12px; color: var(--accent); flex: none; }
+.chev { width: 16px; height: 16px; flex: none; display: grid; place-items: center; color: var(--muted); }
+.chev svg { width: 10px; height: 10px; transition: transform .12s; }
+.open > .row .chev svg { transform: rotate(90deg); }
+.ico { width: 16px; height: 16px; flex: none; }
+.row input {
+  flex: 1; min-width: 0; font: inherit; color: var(--title); background: var(--ov-bg);
+  border: 1px solid var(--accent); border-radius: 4px; padding: 2px 5px; height: 24px;
+}
+.empty-tree { color: var(--muted); font-size: 12.5px; padding: 10px 6px; line-height: 1.5; }
+.ico.big { width: 40px; height: 40px; }
+.fstyle { overflow: auto; min-height: 0; display: grid; align-content: start; gap: 16px; padding: 6px 4px; }
+.fhead { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fhead div { min-width: 0; }
+.fhead b { display: block; font-size: 16px; color: var(--title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fhead span { font-size: 12px; color: var(--muted); }
+.fstyle h3 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.sw { width: 26px; height: 26px; border-radius: 50%; background: var(--c); border: 2px solid transparent; cursor: pointer; box-shadow: inset 0 0 0 2px var(--panel); padding: 0; }
+.sw[aria-pressed="true"] { border-color: var(--title); }
+.icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: 6px; }
+.icn { border: 1px solid var(--line); background: var(--ov-bg); border-radius: 8px; padding: 9px 2px 6px; display: grid; justify-items: center; gap: 5px; cursor: pointer; }
+.icn svg { width: 22px; height: 22px; }
+.icn span { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.icn:hover { background: var(--row-hover); }
+.icn[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.icn[aria-pressed="true"] span { color: var(--title); }
+
+.confirm { border-top: 1px solid var(--line); padding-top: 8px; font-size: 12.5px; display: grid; gap: 6px; }
+.confirm p { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.confirm div { display: flex; gap: 6px; }
+.confirm button { flex: 1; border-radius: 6px; padding: 5px 0; cursor: pointer; font-weight: 600; font-size: 12px; border: 1px solid var(--line); background: var(--ov-bg); }
+.confirm .del { background: var(--danger); border-color: var(--danger); color: #1a0b0a; }
+
+/* ---------- note area ---------- */
+.main { display: grid; grid-template-rows: auto 1fr; padding: 8px 10px 10px; gap: 6px; }
+.main.solo { grid-template-rows: 1fr; }
+.mhead { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; flex: none; }
+.seg button { border: 0; background: transparent; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--title); }
+.progress { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
+.link-btn { border: 0; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+.link-btn:hover { color: var(--title); background: var(--row-hover); }
+.main textarea {
+  width: 100%; height: 100%; resize: none; border: 0; outline: none; background: transparent;
+  color: var(--text); font-family: var(--font-note); font-size: 14px; line-height: 1.55; min-height: 0;
+}
+.main textarea:focus-visible { outline: none; }
+.placeholder { align-self: center; justify-self: center; text-align: center; color: var(--muted); font-size: 13.5px; line-height: 1.6; max-width: 32ch; }
+
+.checks { overflow: auto; min-height: 0; display: grid; align-content: start; gap: 2px; }
+.checks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.item { display: flex; align-items: center; gap: 8px; padding: 2px 4px; border-radius: 6px; }
+.item:hover { background: var(--row-hover); }
+.item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex: none; cursor: pointer; margin: 0; }
+.item input[type="text"] {
+  flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-family: var(--font-note);
+  font-size: 14px; padding: 4px 0; outline: none;
+}
+.item.done input[type="text"] { color: var(--done); text-decoration: line-through; }
+.item .x { border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px; border-radius: 4px; opacity: 0; font-size: 14px; }
+.item:hover .x, .item:focus-within .x { opacity: 1; }
+.item .x:hover { color: var(--danger); }
+.add-item { justify-self: start; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 6px 4px; font-size: 13px; }
+.add-item:hover { color: var(--title); }
+
+.footer {
+  display: flex; align-items: center; gap: 12px; padding: 0 14px; font-size: 11.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden;
+}
+.footer .keys { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+
+.menu {
+  position: absolute; z-index: 10; min-width: 170px; background: var(--ov-bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0,0,0,.5); display: grid;
+}
+.menu button {
+  border: 0; background: transparent; text-align: left; padding: 7px 10px; border-radius: 5px; cursor: pointer; font-size: 13px;
+  display: flex; justify-content: space-between; gap: 16px;
+}
+.menu button:hover:not(:disabled) { background: var(--row-hover); }
+.menu button:disabled { color: var(--muted); opacity: .5; cursor: default; }
+.menu button span { color: var(--muted); font-size: 11.5px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.menu .danger { color: var(--danger); }
+
+/* ---------- pinned card ---------- */
+.pin-card {
+  position: absolute; z-index: 4; width: min(290px, calc(100% - 24px));
+  background: var(--ov-bg); opacity: var(--ov-opacity); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.4); display: grid; grid-template-rows: 34px auto; overflow: hidden;
+}
+.pin-head {
+  display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px; cursor: grab; user-select: none; touch-action: none;
+  border-bottom: 1px solid var(--line); min-width: 0;
+}
+.pin-head:active { cursor: grabbing; }
+.pin-head svg { width: 13px; height: 13px; color: var(--accent); flex: none; }
+.pin-head b { font-size: 12.5px; font-weight: 600; color: var(--title); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.pin-head small { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pin-head button { border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 5px; padding: 2px 6px; font-size: 13px; }
+.pin-head button:hover { background: var(--row-hover); color: var(--title); }
+.pin-body {
+  max-height: 260px; overflow: auto; padding: 8px 12px 10px; font-family: var(--font-note); font-size: 12.5px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text);
+}
+.pin-body ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; white-space: normal; }
+.pin-body li { display: flex; gap: 8px; align-items: flex-start; }
+.pin-body li i { width: 13px; height: 13px; margin-top: 3px; flex: none; border: 1.5px solid var(--muted); border-radius: 3px; display: grid; place-items: center; }
+.pin-body li.done { color: var(--done); text-decoration: line-through; }
+.pin-body li.done i { background: var(--accent); border-color: var(--accent); }
+.pin-body li.done i::after { content: ""; width: 6px; height: 3px; border: 1.5px solid var(--accent-ink); border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+.pin-empty { color: var(--muted); font-family: var(--font-ui); }
+
+@media (max-width: 640px) {
+  .scene { min-height: 680px; }
+  .body { grid-template-columns: 1fr; grid-template-rows: 190px 1fr; }
+  .overlay { height: min(580px, calc(100% - 24px)); }
+  .games { margin-left: 0; }
+  .opacity input { width: 60px; }
+  .opacity output, .tbtn .lbl { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .chev svg { transition: none; } }
+
+/* ---------- desktop window overrides ---------- */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+html, body { background: transparent !important; }
+body { padding: 0 !important; display: block !important; }
+.overlay { position: relative; width: 100%; height: 100%; box-shadow: none; }
+.titlebar, .titlebar .pill, .titlebar .ttl { -webkit-user-select: none; }
+.is-locked .titlebar { cursor: default; }
+.lock-btn svg .open-shackle { display: none; }
+.lock-btn[aria-pressed="false"] svg .closed-shackle { display: none; }
+.lock-btn[aria-pressed="false"] svg .open-shackle { display: inline; }
+#saved { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+</style>
+</head>
+<body>
+<section class="overlay" id="overlay" aria-label="Game Notes">
+  <div class="titlebar" id="titlebar" data-tauri-drag-region>
+    <span class="pill" data-tauri-drag-region></span>
+    <div class="ttl" id="ttl" data-tauri-drag-region>Notes</div>
+    <label class="opacity" title="Overlay opacity">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg>
+      <input type="range" id="opacity" min="35" max="100" step="1" aria-label="Overlay opacity">
+      <output id="opacityOut" for="opacity">96%</output>
+    </label>
+    <button class="tbtn lock-btn" id="lockBtn" type="button" aria-pressed="false" title="Lock position">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="currentColor" stroke="none"/><path class="closed-shackle" d="M5.2 7V5a2.8 2.8 0 0 1 5.6 0v2"/><path class="open-shackle" d="M5.2 7V5a2.8 2.8 0 0 1 5.5-.8"/></svg><span class="lbl" id="lockLbl">Lock</span>
+    </button>
+    <button class="tbtn" id="pinBtn" type="button" aria-pressed="false" title="Pin this note on screen while you play">
+      <svg viewBox="0 0 16 16" fill="currentColor"><path d="M10.2 1.3 14.7 5.8l-1.4.6-2.3 2.3.2 3.3-1.3 1.3-2.7-2.7L3 14.8l-1-1 4.2-4.2-2.7-2.7L4.8 5.6l3.3.2 2.3-2.3z"/></svg><span class="lbl">Pin</span>
+    </button>
+    <button class="tbtn" id="hideBtn" type="button" title="Shift+F1 or Esc">Hide</button>
+  </div>
+  <div class="body">
+    <aside class="side">
+      <div class="tools">
+        <button class="tool" id="newFolder" type="button" title="New folder">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 4.5h4l1.5 1.5H14v6.5H2z"/><path d="M8 7.8v3.4M6.3 9.5h3.4"/></svg>Folder
+        </button>
+        <button class="tool" id="newNote" type="button" title="New text note">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 1.8h5.5L12 4.3v9.9H4z"/><path d="M8 6.6v4.6M5.7 8.9h4.6"/></svg>Note
+        </button>
+        <button class="tool" id="newList" type="button" title="New checklist">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2.5" width="4" height="4" rx="1"/><path d="M8.5 4.5H14"/><rect x="2" y="9.5" width="4" height="4" rx="1"/><path d="M8.5 11.5H14"/></svg>List
+        </button>
+      </div>
+      <div class="tree" id="tree" role="tree" aria-label="Folders and notes"></div>
+      <div class="confirm" id="confirm" hidden></div>
+    </aside>
+    <div class="main" id="main"></div>
+  </div>
+  <div class="footer">
+    <span class="keys">Shift+F1 / Esc hide · F2 rename · Del delete · right-click for more · drag notes into folders</span>
+    <span id="saved">Saved</span>
+  </div>
+  <div class="menu" id="menu" hidden role="menu"></div>
+</section>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const overlay = $('overlay'), tree = $('tree'), main = $('main'), menu = $('menu'), confirmBox = $('confirm');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // ---------- icons ----------
+  const ICON_FOLDER = '<svg class="ico" viewBox="0 0 16 16"><path d="M1.5 3.5h4.6l1.4 1.5h7v8.5h-13z" fill="var(--folder)"/><path d="M1.5 6h13" stroke="#c99232" stroke-width="1"/></svg>';
+  const ICON_NOTE = '<svg class="ico" viewBox="0 0 16 16"><path d="M3.5 1.5h6.2l2.8 2.8v10.2h-9z" fill="#dcdce6"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3" stroke="var(--accent)" stroke-width="1.2"/></svg>';
+  const ICON_LIST = '<svg class="ico" viewBox="0 0 16 16"><rect x="2" y="1.5" width="12" height="13" rx="2" fill="#dcdce6"/><rect x="4" y="4" width="3" height="3" rx=".6" fill="var(--accent)"/><path d="M8.5 5.5h3.5" stroke="#55556a" stroke-width="1.2"/><rect x="4" y="9" width="3" height="3" rx=".6" fill="none" stroke="var(--accent)" stroke-width="1"/><path d="M8.5 10.5h3.5" stroke="#55556a" stroke-width="1.2"/></svg>';
+  const ICON_PIN = '<svg class="pin-dot" viewBox="0 0 16 16" fill="currentColor"><path d="M10.2 1.3 14.7 5.8l-1.4.6-2.3 2.3.2 3.3-1.3 1.3-2.7-2.7L3 14.8l-1-1 4.2-4.2-2.7-2.7L4.8 5.6l3.3.2 2.3-2.3z"/></svg>';
+  const CHEV = '<svg viewBox="0 0 10 10"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+
+  // ---------- folder colors + icons ----------
+  const COLORS = [
+    { key: 'amber', name: 'Amber', hex: '#e8b44c' }, { key: 'red', name: 'Red', hex: '#ef6b6b' },
+    { key: 'orange', name: 'Orange', hex: '#f08a4b' }, { key: 'green', name: 'Green', hex: '#5fbf72' },
+    { key: 'teal', name: 'Teal', hex: '#3fbfb0' }, { key: 'blue', name: 'Blue', hex: '#5b9cf0' },
+    { key: 'purple', name: 'Purple', hex: '#9d8cff' }, { key: 'pink', name: 'Pink', hex: '#e879b9' },
+    { key: 'gray', name: 'Gray', hex: '#9a9aae' },
+  ];
+  const DOT = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="currentColor" stroke="none"/>`;
+  const ICONS = [
+    { key: 'folder', name: 'Folder', g: '<path d="M1.5 3.5h4.6l1.4 1.5h7v8.5h-13z" fill="currentColor" stroke="none"/>' },
+    { key: 'boss', name: 'Boss', g: '<path d="M8 2C5 2 3 4 3 6.7c0 1.6.8 2.9 2 3.5V13h6v-2.8c1.2-.6 2-1.9 2-3.5C13 4 11 2 8 2z"/><path d="M7 13v-1.6M9 13v-1.6"/>' + DOT(6, 7.2, 1.15) + DOT(10, 7.2, 1.15) },
+    { key: 'resource', name: 'Resource', g: '<path d="M4.6 2.5h6.8L14 6l-6 7.5L2 6z"/><path d="M2 6h12M6.3 2.5 5.2 6 8 13.5 10.8 6 9.7 2.5"/>' },
+    { key: 'quest', name: 'Quest', g: '<path d="M3.5 14V2.5"/><path d="M3.5 3h8.5l-2 3 2 3H3.5"/>' },
+    { key: 'location', name: 'Location', g: '<path d="M8 14s4.5-4.2 4.5-7.6a4.5 4.5 0 0 0-9 0C3.5 9.8 8 14 8 14z"/>' + DOT(8, 6.4, 1.6) },
+    { key: 'base', name: 'Base', g: '<path d="M2.5 7.5 8 2.5l5.5 5"/><path d="M4 6.4v7.1h8V6.4M6.8 13.5V10h2.4v3.5"/>' },
+    { key: 'weapon', name: 'Weapon', g: '<path d="M13.5 2.5 6.2 9.8M13.5 2.5H11M13.5 2.5V5M4.2 8.3l3.5 3.5M5.4 10.6 2.5 13.5"/>' },
+    { key: 'armor', name: 'Armor', g: '<path d="M8 1.8 13 3.6v4c0 3.2-2.2 5.4-5 6.6-2.8-1.2-5-3.4-5-6.6v-4z"/>' },
+    { key: 'crafting', name: 'Crafting', g: '<path d="M10.6 2.2a3 3 0 0 0-3.4 3.9L2.5 10.8l2.7 2.7 4.7-4.7a3 3 0 0 0 3.9-3.4l-1.9 1.9-2-.5-.5-2z"/>' },
+    { key: 'farming', name: 'Farming', g: '<path d="M8 14V8.2M8 8.2C8 5.3 6.1 3.5 3 3.5c0 3 1.9 4.7 5 4.7zM8 9.8c0-2.6 1.8-4.2 4.6-4.2 0 2.6-1.8 4.2-4.6 4.2z"/>' },
+    { key: 'loot', name: 'Loot', g: '<path d="M2.5 7h11v6.5h-11zM2.5 7a3 3 0 0 1 3-3h5a3 3 0 0 1 3 3"/><path d="M7 8.6h2v2.2H7z"/>' },
+    { key: 'team', name: 'Team', g: '<circle cx="6" cy="5.4" r="2.2"/><path d="M2 13.5c0-2.4 1.8-4 4-4s4 1.6 4 4M10.6 3.3a2.1 2.1 0 0 1 0 4.2M11.6 9.6c1.5.4 2.4 1.7 2.4 3.9"/>' },
+    { key: 'daily', name: 'Daily', g: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.6h11M5.5 2v3M10.5 2v3"/>' + DOT(8, 10, 1.1) },
+    { key: 'potion', name: 'Potion', g: '<path d="M6.3 2h3.4M7 2v3.6L3.6 11a2 2 0 0 0 1.7 3h5.4a2 2 0 0 0 1.7-3L9 5.6V2M4.7 10h6.6"/>' },
+    { key: 'secret', name: 'Secret', g: '<circle cx="5.4" cy="10.6" r="2.9"/><path d="M7.5 8.5 13.5 2.5M11.4 4.6l1.6 1.6M9.8 6.2l1.2 1.2"/>' },
+    { key: 'trophy', name: 'Trophy', g: '<path d="M5 2.5h6V6a3 3 0 0 1-6 0zM5 3.5H2.8a2.2 2.2 0 0 0 2.4 3M11 3.5h2.2a2.2 2.2 0 0 1-2.4 3M8 9v2.4M5.5 13.5h5M6.5 11.4h3v2.1"/>' },
+    { key: 'food', name: 'Food', g: '<path d="M8 5c-1-1-4.6-1.3-5.1 2-.5 3.2 1.6 7 3.3 7 .8 0 1.2-.4 1.8-.4s1 .4 1.8.4c1.7 0 3.8-3.8 3.3-7-.5-3.3-4.1-3-5.1-2zM8 5c0-1.5.8-2.5 2.1-3"/>' },
+    { key: 'star', name: 'Favorite', g: '<path d="M8 2l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1L2 6.3l4.2-.5z"/>' },
+    { key: 'warning', name: 'Danger', g: '<path d="M8 2.2 14.2 13H1.8z"/><path d="M8 6.3v3.4"/>' + DOT(8, 11.3, .9) },
+  ];
+  const STROKE = 'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+  const hexOf = (key) => (COLORS.find((c) => c.key === key) || COLORS[0]).hex;
+  const iconOf = (key) => ICONS.find((i) => i.key === key) || ICONS[0];
+  function folderIcon(node, big) {
+    if (node.type !== 'folder') return node.kind === 'list' ? ICON_LIST : ICON_NOTE;
+    const hex = hexOf(node.color), cls = big ? 'ico big' : 'ico';
+    if (!node.icon || node.icon === 'folder') {
+      return `<svg class="${cls}" viewBox="0 0 16 16" style="color:${hex}"><path d="M1.5 3.5h4.6l1.4 1.5h7v8.5h-13z" fill="currentColor"/><path d="M1.5 6h13" stroke="rgba(0,0,0,.28)"/></svg>`;
+    }
+    return `<svg class="${cls}" viewBox="0 0 16 16" style="color:${hex}"><rect x=".5" y=".5" width="15" height="15" rx="4" fill="currentColor" fill-opacity=".2"/><g transform="translate(2.2 2.2) scale(.725)" ${STROKE} stroke-width="1.9">${iconOf(node.icon).g}</g></svg>`;
+  }
+  function countNotes(f) { return f.children.reduce((s, c) => s + (c.type === 'folder' ? countNotes(c) : 1), 0); }
+  function folderPanel(f) {
+    const hex = hexOf(f.color), ic = f.icon || 'folder', ck = f.color || 'amber', count = countNotes(f);
+    return `<div class="fstyle" data-id="${esc(f.id)}">
+      <div class="fhead">${folderIcon(f, true)}<div><b>${esc(f.name)}</b><span>${count} ${count === 1 ? 'note' : 'notes'} inside · add more with Note or List</span></div></div>
+      <section><h3>Color</h3><div class="swatches">${COLORS.map((c) => `<button type="button" class="sw" data-color="${c.key}" style="--c:${c.hex}" aria-pressed="${c.key === ck}" title="${c.name}" aria-label="${c.name}"></button>`).join('')}</div></section>
+      <section><h3>Icon</h3><div class="icons">${ICONS.map((i) => `<button type="button" class="icn" data-icon="${i.key}" aria-pressed="${i.key === ic}" style="color:${hex}"><svg viewBox="0 0 16 16" ${STROKE}>${i.g}</svg><span>${i.name}</span></button>`).join('')}</div></section>
+    </div>`;
+  }
+  function guessStyle(list) {
+    list.forEach((nd) => {
+      if (nd.type !== 'folder') return;
+      const nm = nd.name.toLowerCase();
+      if (!nd.icon) {
+        if (/boss/.test(nm)) { nd.icon = 'boss'; nd.color = 'red'; }
+        else if (/base|build|house/.test(nm)) { nd.icon = 'base'; nd.color = 'blue'; }
+        else if (/resource|material|farm|ore/.test(nm)) { nd.icon = 'resource'; nd.color = 'teal'; }
+        else if (/daily|weekly/.test(nm)) { nd.icon = 'daily'; nd.color = 'orange'; }
+        else if (/quest/.test(nm)) { nd.icon = 'quest'; nd.color = 'amber'; }
+      }
+      guessStyle(nd.children);
+    });
+  }
+
+
+  // ---------- Tauri bridge ----------
+  const T = window.__TAURI__;
+  const invoke = T.core.invoke;
+  const { listen, emit } = T.event;
+
+  let info = null;              // { exe, name } of the game this overlay is for
+  let settings = { opacity: 96, locked: false };
+  let meta = blankMeta();       // per-game: folder styles, checklist notes, open folders, selection, pin
+  let nodes = [];               // folder/note tree built from the real files
+  let cur = null;               // { path, text, dirty } of the open note
+  let renaming = null, pendingDelete = null, dragId = null, saveTimer = null, metaTimer = null, opTimer = null;
+
+  function blankMeta() { return { styles: {}, kinds: {}, open: {}, selected: null, pinned: null }; }
+  const metaPath = () => `${info.name}/.gamenotes.json`;
+  const parentOf = (p) => p.slice(0, p.lastIndexOf('/'));
+
+  async function readJSON(rel, fallback) {
+    try { const t = await invoke('read_text', { rel }); return t.trim() ? JSON.parse(t) : fallback; }
+    catch (e) { return fallback; }
+  }
+  async function loadSettings() {
+    const s = await readJSON('settings.json', {});
+    settings.opacity = typeof s.opacity === 'number' ? s.opacity : 96;
+    settings.locked = !!s.locked;
+  }
+  async function saveSetting(key, value) {
+    const s = await readJSON('settings.json', {});
+    s[key] = value; settings[key] = value;
+    try { await invoke('write_text', { rel: 'settings.json', content: JSON.stringify(s, null, 2) }); } catch (e) { toast(e); }
+    emit('settings-changed');
+  }
+  function saveMetaSoon() { clearTimeout(metaTimer); metaTimer = setTimeout(saveMeta, 300); }
+  async function saveMeta() {
+    clearTimeout(metaTimer);
+    if (!info) return;
+    try { await invoke('write_text', { rel: metaPath(), content: JSON.stringify(meta, null, 2) }); } catch (e) { toast(e); }
+  }
+  function toast(msg) {
+    const el = $('saved');
+    el.textContent = String(msg).replace(/^Error:\s*/, '');
+    el.style.color = 'var(--danger)';
+    setTimeout(() => { el.style.color = ''; el.textContent = 'Saved'; }, 3500);
+  }
+
+  async function loadTree() {
+    const raw = await invoke('list_tree', { dir: info.name });
+    const conv = (list) => list.map((n) => n.dir
+      ? { id: n.path, type: 'folder', name: n.name, open: meta.open[n.path] !== false,
+          color: meta.styles[n.path]?.color, icon: meta.styles[n.path]?.icon, children: conv(n.children) }
+      : { id: n.path, type: 'note', name: n.name.replace(/\.txt$/i, ''), kind: meta.kinds[n.path] === 'list' ? 'list' : 'text' });
+    nodes = conv(raw);
+  }
+
+  // ---------- saving the open note ----------
+  function saveSoon() {
+    if (!cur) return;
+    cur.dirty = true;
+    $('saved').textContent = 'Saving…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushNote, 450);
+  }
+  async function flushNote() {
+    clearTimeout(saveTimer);
+    if (!cur || !cur.dirty) return;
+    const { path, text } = cur;
+    cur.dirty = false;
+    try {
+      await invoke('write_text', { rel: path, content: text });
+      $('saved').textContent = 'Saved';
+      if (meta.pinned === path) emit('pin-refresh');
+    } catch (e) { toast(e); }
+  }
+  async function openNote(path) {
+    await flushNote();
+    let text = '';
+    try { text = await invoke('read_text', { rel: path }); } catch (e) { toast(e); }
+    cur = { path, text, dirty: false };
+  }
+
+  // ---------- checklist text format: "[ ] item" / "[x] item" per line ----------
+  function parseList(text) {
+    return text.split('\n').filter((l) => l.trim() !== '').map((l) => {
+      const m = l.match(/^\s*\[( |x|X)\]\s?(.*)$/);
+      if (m) return { done: m[1].toLowerCase() === 'x', text: m[2] };
+      return { done: false, text: l.replace(/^\s*[-*•]\s+/, '') };
+    });
+  }
+  const listToText = (items) => items.map((it) => `[${it.done ? 'x' : ' '}] ${it.text}`).join('\n');
+  const listProgress = (text) => { const it = parseList(text); return { done: it.filter((x) => x.done).length, total: it.length }; };
+
+  // ---------- tree helpers ----------
+  function find(id, list = nodes, parent = null) {
+    if (!id) return null;
+    for (const node of list) {
+      if (node.id === id) return { node, list, parent };
+      if (node.type === 'folder') { const r = find(id, node.children, node); if (r) return r; }
+    }
+    return null;
+  }
+  function firstNote(list = nodes) {
+    for (const node of list) {
+      if (node.type === 'note') return node;
+      const r = node.type === 'folder' && firstNote(node.children);
+      if (r) return r;
+    }
+    return null;
+  }
+  function targetDir() {
+    const sel = find(meta.selected);
+    if (!sel) return info.name;
+    if (sel.node.type === 'folder') { meta.open[sel.node.id] = true; return sel.node.id; }
+    return parentOf(sel.node.id);
+  }
+  function pathOf(id) {
+    return id ? id.split('/').slice(1).map((p) => p.replace(/\.txt$/i, '')) : [];
+  }
+  const selectedNote = () => { const h = find(meta.selected); return h && h.node.type === 'note' ? h.node : null; };
+
+  // When something is renamed or moved, carry its colors, checklist type, pin etc. along.
+  function remap(oldP, newP) {
+    const fix = (p) => (p === oldP ? newP : p && p.startsWith(oldP + '/') ? newP + p.slice(oldP.length) : p);
+    for (const key of ['styles', 'kinds', 'open']) {
+      const next = {};
+      for (const [k, v] of Object.entries(meta[key])) next[fix(k)] = v;
+      meta[key] = next;
+    }
+    meta.selected = fix(meta.selected);
+    const wasPinned = meta.pinned;
+    meta.pinned = fix(meta.pinned);
+    if (cur) cur.path = fix(cur.path);
+    return wasPinned !== meta.pinned;
+  }
+  function forget(p) {
+    const gone = (k) => k === p || (k && k.startsWith(p + '/'));
+    for (const key of ['styles', 'kinds', 'open']) for (const k of Object.keys(meta[key])) if (gone(k)) delete meta[key][k];
+    if (gone(meta.selected)) meta.selected = null;
+    const unpinned = gone(meta.pinned);
+    if (unpinned) meta.pinned = null;
+    if (cur && gone(cur.path)) cur = null;
+    return unpinned;
+  }
+
+
+  // ---------- render ----------
+  function renderTree() {
+    if (!nodes.length) {
+      tree.innerHTML = '<div class="empty-tree">No notes yet for this game. Use <b>Folder</b>, <b>Note</b> or <b>List</b> above to start.</div>';
+      return;
+    }
+    const build = (list, depth) => '<ul role="group">' + list.map((node) => {
+      const isF = node.type === 'folder';
+      const label = renaming === node.id
+        ? `<input id="rename-input" value="${esc(node.name)}" aria-label="New name" spellcheck="false">`
+        : `<span class="name">${esc(node.name)}</span>${meta.pinned === node.id ? ICON_PIN : ''}`;
+      const row = `<div class="row${meta.selected === node.id ? ' sel' : ''}" data-id="${esc(node.id)}" role="treeitem" tabindex="${meta.selected === node.id ? 0 : -1}"
+          ${isF ? `aria-expanded="${!!node.open}"` : ''} draggable="${renaming === node.id ? 'false' : 'true'}" style="padding-left:${6 + depth * 16}px">
+          <span class="chev" data-chev="${isF ? 1 : ''}">${isF ? CHEV : ''}</span>${folderIcon(node)}${label}</div>`;
+      return `<li class="${isF && node.open ? 'open' : ''}">${row}${isF && node.open && node.children.length ? build(node.children, depth + 1) : ''}</li>`;
+    }).join('') + '</ul>';
+    tree.innerHTML = build(nodes, 0);
+    const inp = $('rename-input');
+    if (inp) { inp.focus(); inp.select(); }
+  }
+
+  function renderMain(focusItem) {
+    const sel = find(meta.selected);
+    if (!sel || sel.node.type !== 'note' || !cur || cur.path !== sel.node.id) {
+      main.className = 'main solo';
+      main.innerHTML = sel && sel.node.type === 'folder'
+        ? folderPanel(sel.node)
+        : '<div class="placeholder">Pick a note on the left, or click <b>Note</b> or <b>List</b> to make one.</div>';
+      return;
+    }
+    const nd = sel.node;
+    main.className = 'main';
+    const isList = nd.kind === 'list';
+    const prog = isList ? listProgress(cur.text) : null;
+    const head = `<div class="mhead">
+        <div class="seg" role="group" aria-label="Note type">
+          <button type="button" data-kind="text" aria-pressed="${!isList}">Text</button>
+          <button type="button" data-kind="list" aria-pressed="${isList}">Checklist</button>
+        </div>
+        ${isList ? `<span class="progress" id="prog">${prog.done} of ${prog.total} done</span>
+        <button type="button" class="link-btn" id="clearDone" ${prog.done ? '' : 'hidden'}>Clear done</button>` : ''}
+      </div>`;
+    if (!isList) {
+      const ta0 = main.querySelector('textarea');
+      if (ta0 && ta0.dataset.id === nd.id) { if (ta0.value !== cur.text) ta0.value = cur.text; return; }
+      main.innerHTML = head + '<textarea id="note-text" spellcheck="false" aria-label="Note"></textarea>';
+      const ta = main.querySelector('textarea');
+      ta.dataset.id = nd.id;
+      ta.value = cur.text;
+      return;
+    }
+    const items = parseList(cur.text);
+    main.innerHTML = head + `<div class="checks" data-id="${esc(nd.id)}"><ul>${items.map((it, i) => `
+        <li class="item${it.done ? ' done' : ''}" data-i="${i}">
+          <input type="checkbox" ${it.done ? 'checked' : ''} aria-label="Done">
+          <input type="text" value="${esc(it.text)}" spellcheck="false" aria-label="Item ${i + 1}">
+          <button type="button" class="x" title="Remove item" aria-label="Remove item">×</button>
+        </li>`).join('')}</ul>
+        <button type="button" class="add-item" id="addItem">+ Add item</button></div>`;
+    if (typeof focusItem === 'number') {
+      const inp = main.querySelectorAll('.item input[type="text"]')[focusItem];
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }
+  }
+
+  function renderTitle() {
+    const p = pathOf(meta.selected);
+    $('ttl').innerHTML = `Notes · ${esc(info ? info.name : '')}${p.length ? ` <em>· ${p.map(esc).join(' / ')}</em>` : ''}`;
+    const nd = selectedNote();
+    const pinBtn = $('pinBtn');
+    pinBtn.disabled = !nd;
+    const pinnedHere = nd && meta.pinned === nd.id;
+    pinBtn.setAttribute('aria-pressed', String(!!pinnedHere));
+    pinBtn.querySelector('.lbl').textContent = pinnedHere ? 'Unpin' : 'Pin';
+    pinBtn.title = pinnedHere ? 'Stop pinning this note' : 'Pin this note on screen while you play';
+  }
+
+  function renderConfirm() {
+    if (!pendingDelete) { confirmBox.hidden = true; return; }
+    const hit = find(pendingDelete);
+    if (!hit) { pendingDelete = null; confirmBox.hidden = true; return; }
+    const extra = hit.node.type === 'folder' && hit.node.children.length ? ' and everything inside it' : '';
+    confirmBox.innerHTML = `<p>Move <b>${esc(hit.node.name)}</b>${extra} to the Recycle Bin?</p>
+      <div><button type="button" id="cancelDel">Cancel</button><button type="button" class="del" id="doDel">Delete</button></div>`;
+    confirmBox.hidden = false;
+    $('doDel').onclick = () => removeNode(pendingDelete);
+    $('cancelDel').onclick = () => { pendingDelete = null; renderConfirm(); focusSel(); };
+  }
+
+  function render() { renderTree(); renderMain(); renderTitle(); renderConfirm(); }
+  function focusSel() { const r = tree.querySelector('.row.sel'); if (r) r.focus(); }
+  function focusEditor() {
+    const ta = main.querySelector('textarea');
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); ta.scrollTop = ta.scrollHeight; return; }
+    const all = main.querySelectorAll('.item input[type="text"]');
+    if (all.length) all[all.length - 1].focus(); else focusSel();
+  }
+
+  // ---------- actions ----------
+  async function select(id) {
+    renaming = null;
+    meta.selected = id;
+    const hit = find(id);
+    if (hit && hit.node.type === 'note' && (!cur || cur.path !== id)) await openNote(id);
+    saveMetaSoon();
+    renderTree(); renderMain(); renderTitle(); focusSel();
+  }
+  async function reloadAndRender() { await loadTree(); render(); }
+
+  async function create(type, kind) {
+    const parent = targetDir();
+    try {
+      let rel;
+      if (type === 'folder') rel = await invoke('make_dir', { parent, base: 'New folder' });
+      else rel = await invoke('make_note', { parent, base: kind === 'list' ? 'New checklist' : 'New note', content: kind === 'list' ? '[ ] ' : '' });
+      if (kind === 'list') meta.kinds[rel] = 'list';
+      if (type === 'folder') meta.open[rel] = true;
+      meta.selected = rel;
+      await saveMeta();
+      await loadTree();
+      if (type !== 'folder') await openNote(rel);
+      renaming = rel;
+      render();
+    } catch (e) { toast(e); }
+  }
+
+  async function commitRename(value, cancel) {
+    const id = renaming; renaming = null;
+    const hit = find(id);
+    if (hit && !cancel && value.trim() && value.trim() !== hit.node.name) {
+      try {
+        await flushNote();
+        const nr = await invoke('rename_item', { rel: id, name: value });
+        const pinMoved = remap(id, nr);
+        await saveMeta();
+        if (pinMoved) emit('pin-refresh');
+      } catch (e) { toast(e); }
+    }
+    await loadTree();
+    renderTree(); renderTitle(); renderMain();
+    const after = find(meta.selected);
+    if (after && after.node.type === 'note' && !cancel) focusEditor(); else focusSel();
+  }
+
+  async function removeNode(id) {
+    pendingDelete = null;
+    try {
+      await flushNote();
+      await invoke('delete_item', { rel: id });
+      const unpinned = forget(id);
+      await loadTree();
+      if (!find(meta.selected)) { const f = firstNote(); meta.selected = f ? f.id : null; }
+      const sn = selectedNote();
+      if (sn && (!cur || cur.path !== sn.id)) await openNote(sn.id);
+      await saveMeta();
+      if (unpinned) await invoke('set_pin_state', { pinned: false, locked: settings.locked });
+    } catch (e) { toast(e); }
+    render(); focusSel();
+  }
+
+  async function move(id, folderId) {
+    const dest = folderId || info.name;
+    if (!find(id) || parentOf(id) === dest) return;
+    try {
+      await flushNote();
+      const nr = await invoke('move_item', { rel: id, dest });
+      if (folderId) meta.open[folderId] = true;
+      const pinMoved = remap(id, nr);
+      await saveMeta();
+      if (pinMoved) emit('pin-refresh');
+    } catch (e) { toast(e); }
+    await reloadAndRender();
+  }
+
+  async function setKind(kind) {
+    const nd = selectedNote();
+    if (!nd || !cur || nd.kind === kind) return;
+    cur.text = listToText(parseList(cur.text));
+    if (kind === 'list') meta.kinds[nd.id] = 'list'; else delete meta.kinds[nd.id];
+    nd.kind = kind;
+    saveSoon(); await flushNote(); await saveMeta();
+    renderTree(); renderMain();
+  }
+
+  async function togglePin() {
+    const nd = selectedNote();
+    if (!nd) return;
+    await flushNote();
+    if (meta.pinned === nd.id) {
+      meta.pinned = null;
+      await saveMeta();
+      await invoke('set_pin_state', { pinned: false, locked: settings.locked });
+      renderTree(); renderTitle();
+      return;
+    }
+    meta.pinned = nd.id;
+    await saveMeta();
+    await invoke('set_pin_state', { pinned: true, locked: settings.locked });
+    hideOverlay(); // pinning hands the screen back to the game
+  }
+
+  function hideOverlay() { invoke('hide_overlay'); }
+
+  // Rust tells us the overlay is closing (Shift+F1, Esc, Hide or Pin): save everything now.
+  listen('overlay-hidden', async () => {
+    if (renaming) { const v = $('rename-input')?.value || ''; await commitRename(v, false); }
+    closeMenu(); pendingDelete = null; renderConfirm();
+    await flushNote(); await saveMeta();
+  });
+
+  listen('overlay-shown', async (e) => {
+    const p = e.payload;
+    if (!info || info.exe !== p.exe) {
+      if (info) { await flushNote(); await saveMeta(); }
+      info = p; cur = null;
+      meta = Object.assign(blankMeta(), await readJSON(metaPath(), {}));
+    }
+    await loadSettings();
+    applyOpacity(); applyLock();
+    await loadTree();
+    if (!nodes.length) {
+      try {
+        const rel = await invoke('make_note', { parent: info.name, base: 'Notes', content: '' });
+        meta.selected = rel;
+        await loadTree();
+      } catch (err) { toast(err); }
+    }
+    if (!find(meta.selected)) { const f = firstNote(); meta.selected = f ? f.id : null; }
+    if (meta.pinned && !find(meta.pinned)) meta.pinned = null;
+    const sn = selectedNote();
+    if (sn) await openNote(sn.id);
+    await saveMeta();
+    invoke('set_pin_state', { pinned: !!meta.pinned, locked: settings.locked });
+    render();
+    focusEditor();
+  });
+
+  // ---------- checklist editing ----------
+  function readItems() {
+    return [...main.querySelectorAll('.item')].map((li) => ({
+      done: li.querySelector('input[type="checkbox"]').checked,
+      text: li.querySelector('input[type="text"]').value.replace(/\n/g, ' '),
+    }));
+  }
+  function writeItems(items, rerenderFocus) {
+    if (!cur) return;
+    cur.text = listToText(items);
+    saveSoon();
+    if (rerenderFocus !== undefined) renderMain(rerenderFocus);
+    else {
+      const p = listProgress(cur.text);
+      const pr = $('prog'); if (pr) pr.textContent = `${p.done} of ${p.total} done`;
+      const cd = $('clearDone'); if (cd) cd.hidden = !p.done;
+    }
+  }
+  main.addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    e.target.closest('.item').classList.toggle('done', e.target.checked);
+    writeItems(readItems());
+  });
+  main.addEventListener('input', (e) => {
+    if (e.target.tagName === 'TEXTAREA') {
+      if (cur && cur.path === e.target.dataset.id) { cur.text = e.target.value; saveSoon(); }
+    } else if (e.target.type === 'text' && e.target.closest('.item')) {
+      writeItems(readItems());
+    }
+  });
+  main.addEventListener('click', (e) => {
+    const swb = e.target.closest('[data-color]'), icb = e.target.closest('[data-icon]');
+    if (swb || icb) {
+      const f = find(main.querySelector('.fstyle')?.dataset.id)?.node;
+      if (!f) return;
+      if (swb) f.color = swb.dataset.color;
+      if (icb) f.icon = icb.dataset.icon;
+      meta.styles[f.id] = { color: f.color || 'amber', icon: f.icon || 'folder' };
+      saveMetaSoon(); renderTree(); renderMain();
+      main.querySelector(swb ? `[data-color="${f.color}"]` : `[data-icon="${f.icon}"]`)?.focus();
+      return;
+    }
+    const kindBtn = e.target.closest('[data-kind]');
+    if (kindBtn) { setKind(kindBtn.dataset.kind); return; }
+    if (e.target.id === 'addItem') { const items = readItems(); items.push({ done: false, text: '' }); writeItems(items, items.length - 1); return; }
+    if (e.target.id === 'clearDone') { const items = readItems().filter((x) => !x.done); writeItems(items, items.length ? items.length - 1 : undefined); if (!items.length) renderMain(); return; }
+    const x = e.target.closest('.item .x');
+    if (x) {
+      const i = +x.closest('.item').dataset.i;
+      const items = readItems(); items.splice(i, 1);
+      writeItems(items, Math.max(0, i - 1));
+    }
+  });
+  main.addEventListener('keydown', (e) => {
+    const li = e.target.closest('.item');
+    if (!li || e.target.type !== 'text') return;
+    const i = +li.dataset.i;
+    const inputs = main.querySelectorAll('.item input[type="text"]');
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const items = readItems();
+      const pos = e.target.selectionStart;
+      const before = items[i].text.slice(0, pos), after = items[i].text.slice(pos);
+      items[i].text = before;
+      items.splice(i + 1, 0, { done: false, text: after });
+      writeItems(items, i + 1);
+      const inp = main.querySelectorAll('.item input[type="text"]')[i + 1];
+      if (inp) inp.setSelectionRange(0, 0);
+    } else if (e.key === 'Backspace' && e.target.selectionStart === 0 && e.target.selectionEnd === 0 && i > 0) {
+      e.preventDefault();
+      const items = readItems();
+      const prevLen = items[i - 1].text.length;
+      items[i - 1].text += items[i].text;
+      items.splice(i, 1);
+      writeItems(items, i - 1);
+      const inp = main.querySelectorAll('.item input[type="text"]')[i - 1];
+      if (inp) inp.setSelectionRange(prevLen, prevLen);
+    } else if (e.key === 'ArrowDown' && inputs[i + 1]) { e.preventDefault(); inputs[i + 1].focus(); }
+    else if (e.key === 'ArrowUp' && inputs[i - 1]) { e.preventDefault(); inputs[i - 1].focus(); }
+    else if (e.key === ' ' && e.ctrlKey) {
+      e.preventDefault();
+      const cb = li.querySelector('input[type="checkbox"]');
+      cb.checked = !cb.checked; li.classList.toggle('done', cb.checked); writeItems(readItems());
+    }
+  });
+
+  // ---------- opacity + lock ----------
+  const op = $('opacity');
+  function applyOpacity() {
+    document.documentElement.style.setProperty('--ov-opacity', String(settings.opacity / 100));
+    op.value = settings.opacity; $('opacityOut').textContent = settings.opacity + '%';
+  }
+  op.addEventListener('input', () => {
+    settings.opacity = +op.value; applyOpacity();
+    clearTimeout(opTimer);
+    opTimer = setTimeout(() => saveSetting('opacity', settings.opacity), 250);
+  });
+  function applyLock() {
+    const on = !!settings.locked;
+    document.body.classList.toggle('is-locked', on);
+    const b = $('lockBtn');
+    b.setAttribute('aria-pressed', String(on));
+    b.title = on ? 'Unlock position (drag to move)' : 'Lock position';
+    $('lockLbl').textContent = on ? 'Locked' : 'Lock';
+    for (const el of [$('titlebar'), ...$('titlebar').querySelectorAll('.pill, .ttl')]) {
+      if (on) el.removeAttribute('data-tauri-drag-region'); else el.setAttribute('data-tauri-drag-region', '');
+    }
+  }
+  $('lockBtn').onclick = async () => {
+    await saveSetting('locked', !settings.locked);
+    applyLock();
+    invoke('set_pin_state', { pinned: !!meta.pinned, locked: settings.locked });
+  };
+
+  // ---------- context menu ----------
+  function openMenu(x, y, id) {
+    const hit = find(id);
+    const isNote = hit && hit.node.type === 'note';
+    const pinned = isNote && meta.pinned === id;
+    menu.innerHTML = `
+      <button type="button" data-act="note">New note</button>
+      <button type="button" data-act="list">New checklist</button>
+      <button type="button" data-act="folder">New folder</button>
+      <hr>
+      <button type="button" data-act="pin" ${isNote ? '' : 'disabled'}>${pinned ? 'Unpin' : 'Pin on screen'}</button>
+      ${hit && hit.node.type === 'folder' ? '<button type="button" data-act="style">Color & icon</button>' : ''}
+      <button type="button" data-act="rename" ${hit ? '' : 'disabled'}>Rename <span>F2</span></button>
+      <button type="button" data-act="explorer">Show in File Explorer</button>
+      <button type="button" data-act="delete" class="danger" ${hit ? '' : 'disabled'}>Delete <span>Del</span></button>`;
+    menu.hidden = false;
+    const r = overlay.getBoundingClientRect();
+    let left = x - r.left, top = y - r.top;
+    left = Math.min(left, overlay.clientWidth - menu.offsetWidth - 6);
+    top = Math.min(top, overlay.clientHeight - menu.offsetHeight - 6);
+    menu.style.left = Math.max(6, left) + 'px'; menu.style.top = Math.max(6, top) + 'px';
+    menu.querySelector('button:not(:disabled)').focus();
+  }
+  function closeMenu() { menu.hidden = true; }
+  menu.addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-act]');
+    if (!b || b.disabled) return;
+    closeMenu();
+    const id = meta.selected;
+    const act = b.dataset.act;
+    if (act === 'note') create('note', 'text');
+    if (act === 'list') create('note', 'list');
+    if (act === 'folder') create('folder');
+    if (act === 'pin') togglePin();
+    if (act === 'style' && id) { await select(id); main.querySelector('.sw[aria-pressed="true"]')?.focus(); }
+    if (act === 'rename' && id) { renaming = id; renderTree(); }
+    if (act === 'explorer') invoke('open_folder', { rel: id || info.name }).catch(toast);
+    if (act === 'delete' && id) { pendingDelete = id; renderConfirm(); }
+  });
+
+  // ---------- tree events ----------
+  tree.addEventListener('click', (e) => {
+    if (e.target.closest('input')) return;
+    const row = e.target.closest('.row');
+    if (!row) return;
+    const hit = find(row.dataset.id);
+    if (!hit) return;
+    if (hit.node.type === 'folder' && (e.target.closest('[data-chev="1"]') || meta.selected === hit.node.id)) {
+      hit.node.open = !hit.node.open;
+      meta.open[hit.node.id] = hit.node.open;
+    }
+    select(hit.node.id);
+  });
+  tree.addEventListener('dblclick', (e) => {
+    const row = e.target.closest('.row');
+    if (!row || e.target.closest('[data-chev="1"]') || e.target.closest('input')) return;
+    renaming = row.dataset.id; renderTree();
+  });
+  tree.addEventListener('contextmenu', async (e) => {
+    e.preventDefault();
+    const row = e.target.closest('.row');
+    if (row) await select(row.dataset.id);
+    openMenu(e.clientX, e.clientY, row ? row.dataset.id : null);
+  });
+  tree.addEventListener('keydown', (e) => {
+    if (e.target.id === 'rename-input') {
+      if (e.key === 'Enter') { e.preventDefault(); commitRename(e.target.value, false); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); commitRename('', true); }
+      return;
+    }
+    const id = meta.selected;
+    if (!id) return;
+    const rows = [...tree.querySelectorAll('.row')];
+    const i = rows.findIndex((r) => r.dataset.id === id);
+    if (e.key === 'F2') { e.preventDefault(); renaming = id; renderTree(); }
+    else if (e.key === 'Delete') { e.preventDefault(); pendingDelete = id; renderConfirm(); $('cancelDel')?.focus(); }
+    else if (e.key === 'ArrowDown' && rows[i + 1]) { e.preventDefault(); select(rows[i + 1].dataset.id); }
+    else if (e.key === 'ArrowUp' && rows[i - 1]) { e.preventDefault(); select(rows[i - 1].dataset.id); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'Enter') {
+      const hit = find(id);
+      if (hit.node.type === 'folder') {
+        e.preventDefault();
+        hit.node.open = e.key === 'Enter' ? !hit.node.open : e.key === 'ArrowRight';
+        meta.open[hit.node.id] = hit.node.open; saveMetaSoon(); renderTree(); focusSel();
+      } else if (e.key === 'Enter') { e.preventDefault(); focusEditor(); }
+    }
+  });
+  tree.addEventListener('focusout', (e) => { if (e.target.id === 'rename-input' && renaming) commitRename(e.target.value, false); });
+
+  tree.addEventListener('dragstart', (e) => {
+    const row = e.target.closest('.row');
+    if (!row) return;
+    dragId = row.dataset.id;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragId); } catch (err) {}
+  });
+  const clearDrop = () => { tree.classList.remove('drop-root'); tree.querySelectorAll('.row.drop').forEach((r) => r.classList.remove('drop')); };
+  tree.addEventListener('dragover', (e) => {
+    if (!dragId) return;
+    const row = e.target.closest('.row');
+    clearDrop();
+    const hit = row && find(row.dataset.id);
+    if (hit && hit.node.type === 'folder' && hit.node.id !== dragId) { row.classList.add('drop'); e.preventDefault(); }
+    else if (!row) { tree.classList.add('drop-root'); e.preventDefault(); }
+  });
+  tree.addEventListener('dragleave', (e) => { if (!tree.contains(e.relatedTarget)) clearDrop(); });
+  tree.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const row = e.target.closest('.row');
+    const id = dragId; dragId = null; clearDrop();
+    if (id) move(id, row ? row.dataset.id : null);
+  });
+  tree.addEventListener('dragend', () => { dragId = null; clearDrop(); });
+
+  // ---------- buttons ----------
+  $('newFolder').onclick = () => create('folder');
+  $('newNote').onclick = () => create('note', 'text');
+  $('newList').onclick = () => create('note', 'list');
+  $('hideBtn').onclick = hideOverlay;
+  $('pinBtn').onclick = togglePin;
+
+  // ---------- keys ----------
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F1' || e.key === 'F5' || (e.ctrlKey && ['r', 'p', 'f', 'g', 'u', 'j'].includes(e.key.toLowerCase()))) { e.preventDefault(); }
+    if (e.key === 'Escape') {
+      if (!menu.hidden) { closeMenu(); focusSel(); return; }
+      if (pendingDelete) { pendingDelete = null; renderConfirm(); focusSel(); return; }
+      if (renaming) return;
+      hideOverlay();
+    }
+    if (e.key === 'Tab' && e.target.tagName === 'TEXTAREA') {
+      e.preventDefault();
+      const t = e.target;
+      t.setRangeText('\t', t.selectionStart, t.selectionEnd, 'end');
+      t.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+  document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('textarea, input[type="text"]')) e.preventDefault();
+  });
+  window.addEventListener('blur', () => { flushNote(); saveMeta(); });
+
+  applyOpacity(); applyLock();
+})();
+</script>
+</body>
+</html>
