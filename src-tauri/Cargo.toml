@@ -1,7 +1,7 @@
 [package]
-name = "game-notes"
+name = "nepnote"
 version = "1.0.0"
-description = "Game Notes - a notes overlay for games"
+description = "Nepnote - a notes overlay for games"
 authors = ["Mior Iman Haiqal"]
 edition = "2021"
 

@@ -1,4 +1,4 @@
-name: Build Game Notes
+name: Build Nepnote
 
 on:
   push:
@@ -35,13 +35,13 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
-          Copy-Item src-tauri/target/release/game-notes.exe out/GameNotes.exe
+          Copy-Item src-tauri/target/release/nepnote.exe out/Nepnote.exe
           Copy-Item src-tauri/target/release/bundle/nsis/*.exe out/
 
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: GameNotes-windows
+          name: Nepnote-windows
           path: out/
 
       - name: Publish release (tags only)

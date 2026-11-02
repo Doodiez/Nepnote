@@ -1,4 +1,4 @@
-# Game Notes
+# Nepnote
 
 A notes overlay for games on Windows. Press **Shift+F1** in a game on your list to open your notes on top of it, organized in folders, with checklists and a pinned card you can keep on screen while you play.
 
@@ -10,11 +10,11 @@ A notes overlay for games on Windows. Press **Shift+F1** in a game on your list 
 - **Folder style:** click a folder to pick its color and icon.
 - **Pin:** shows the current note as a small card while you play. **Lock** keeps the overlay and card in place, and makes the card click-through so clicks go to your game.
 
-Notes are plain `.txt` files in **Documents\Game Notes\<game>**, so you can open them without the app. The game list and settings are in **Documents\Game Notes\settings.json** (tray icon → *Edit game list and settings*).
+Notes are plain `.txt` files in **Documents\Nepnote\<game>**, so you can open them without the app. The game list and settings are in **Documents\Nepnote\settings.json** (tray icon → *Edit game list and settings*).
 
 ## Anti-cheat safety
 
-Game Notes is built to stay out of anti-cheat's way:
+Nepnote is built to stay out of anti-cheat's way:
 
 - **Hotkeys only when needed.** Shift+F1 is a standard Windows hotkey, registered only while a listed game is in front and released otherwise. There are no keyboard hooks.
 - **Never touches the game.** Games are recognized from the Windows process list. No game process is opened, read, injected into or drawn inside.
@@ -24,13 +24,13 @@ Game Notes is built to stay out of anti-cheat's way:
 
 You can add your own entries in `settings.json`:
 
-- `"blocklist"`: games where Game Notes should never open.
-- `"antiCheatProcesses"`: extra program names that should make Game Notes stand down.
+- `"blocklist"`: games where Nepnote should never open.
+- `"antiCheatProcesses"`: extra program names that should make Nepnote stand down.
 
 No tool can guarantee a game's rules. Check each game's terms, and for competitive games keep notes outside the game.
 
 ## Building
 
-GitHub Actions builds it on every push (see `.github/workflows/build.yml`). Download **GameNotes-windows** from the latest run: it has the portable `GameNotes.exe` and an installer.
+GitHub Actions builds it on every push (see `.github/workflows/build.yml`). Download **Nepnote-windows** from the latest run: it has the portable `Nepnote.exe` and an installer.
 
 To build locally: install Rust and Node.js, then run `npm install` and `npx tauri build`.

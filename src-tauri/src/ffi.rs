@@ -156,7 +156,7 @@ pub fn show_no_activate(hwnd: isize, show: bool) {
 
 pub fn message(text: &str) {
     let t = wide(text);
-    let c = wide("Game Notes");
+    let c = wide("Nepnote");
     unsafe {
         MessageBoxW(0, t.as_ptr(), c.as_ptr(), 0x30); // MB_ICONWARNING
     }
@@ -166,9 +166,9 @@ pub fn is_elevated() -> bool {
     unsafe { IsUserAnAdmin() != 0 }
 }
 
-/// True if another copy of Game Notes is already running.
+/// True if another copy of Nepnote is already running.
 pub fn already_running() -> bool {
-    let name = wide("GameNotes.SingleInstance.Doodiez");
+    let name = wide("Nepnote.SingleInstance.Doodiez");
     unsafe {
         let h = CreateMutexW(std::ptr::null(), 1, name.as_ptr());
         h != 0 && GetLastError() == 183 // ERROR_ALREADY_EXISTS
