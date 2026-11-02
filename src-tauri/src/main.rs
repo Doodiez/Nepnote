@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-//! Game Notes: a notes overlay for games.
+//! Nepnote: a notes overlay for games.
 //!
 //! Anti-cheat safety rules this file follows:
 //! - Shift+F1 is a normal Windows hotkey (RegisterHotKey), registered only while a
@@ -25,10 +25,10 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
-const PIN_TITLE: &str = "Game Notes Pin";
+const PIN_TITLE: &str = "Nepnote Pin";
 const PIN_WIDTH: f64 = 300.0;
 
-/// Anti-cheat programs. If any of these is running, Game Notes stands down.
+/// Anti-cheat programs. If any of these is running, Nepnote stands down.
 const ANTI_CHEAT: &[(&str, &str)] = &[
     ("easyanticheat.exe", "Easy Anti-Cheat"),
     ("easyanticheat_eos.exe", "Easy Anti-Cheat"),
@@ -48,7 +48,7 @@ const ANTI_CHEAT: &[(&str, &str)] = &[
 ];
 
 /// Games whose anti-cheat runs as a driver (no separate program to spot), or that
-/// we want to stay away from regardless. Game Notes stands down while they run.
+/// we want to stay away from regardless. Nepnote stands down while they run.
 const PROTECTED_GAMES: &[(&str, &str)] = &[
     ("valorant-win64-shipping.exe", "Riot Vanguard"),
     ("league of legends.exe", "Riot Vanguard"),
@@ -480,9 +480,9 @@ fn poll(app: &AppHandle) {
                 if overlay_visible {
                     hide_overlay_inner(app);
                 }
-                set_status(app, &format!("Game Notes is paused: {reason}"));
+                set_status(app, &format!("Nepnote is paused: {reason}"));
             }
-            None => set_status(app, "Game Notes - Shift+F1 in a listed game"),
+            None => set_status(app, "Nepnote - Shift+F1 in a listed game"),
         }
         let _ = app.emit("paused-changed", ());
     }
@@ -688,12 +688,12 @@ fn resize_pin(app: AppHandle, height: f64) {
 fn main() {
     if ffi::is_elevated() {
         ffi::message(
-            "Game Notes is running as administrator.\n\nFor safety around game anti-cheat it only runs as a normal app. Close it and start it again normally (not \"Run as administrator\").",
+            "Nepnote is running as administrator.\n\nFor safety around game anti-cheat it only runs as a normal app. Close it and start it again normally (not \"Run as administrator\").",
         );
         return;
     }
     if ffi::already_running() {
-        ffi::message("Game Notes is already running. Look for its icon in the system tray.");
+        ffi::message("Nepnote is already running. Look for its icon in the system tray.");
         return;
     }
 
@@ -716,8 +716,8 @@ fn main() {
             let root = app
                 .path()
                 .document_dir()
-                .map(|d| d.join("Game Notes"))
-                .unwrap_or_else(|_| PathBuf::from("Game Notes"));
+                .map(|d| d.join("Nepnote"))
+                .unwrap_or_else(|_| PathBuf::from("Nepnote"));
             let _ = fs::create_dir_all(&root);
             ensure_settings(&root);
             let st: St = Arc::new(Mutex::new(Shared { root: root.clone(), ..Default::default() }));
@@ -726,11 +726,11 @@ fn main() {
             let open = MenuItem::with_id(app, "open", "Open notes folder", true, None::<&str>)?;
             let edit = MenuItem::with_id(app, "settings", "Edit game list and settings", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
-            let quit = MenuItem::with_id(app, "quit", "Exit Game Notes", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Exit Nepnote", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &edit, &sep, &quit])?;
             let menu_root = root.clone();
             let mut tray = TrayIconBuilder::with_id("main")
-                .tooltip("Game Notes - Shift+F1 in a listed game")
+                .tooltip("Nepnote - Shift+F1 in a listed game")
                 .menu(&menu)
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => {
@@ -776,5 +776,5 @@ fn main() {
             resize_pin
         ])
         .run(tauri::generate_context!())
-        .expect("Game Notes failed to start");
+        .expect("Nepnote failed to start");
 }
